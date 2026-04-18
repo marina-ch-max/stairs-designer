@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Проектировщик лестниц · MVP</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f5f5f7; color: #1d1d1f; }
+  .gate { max-width: 420px; margin: 15vh auto; padding: 32px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; }
+  .gate h1 { margin: 0 0 8px; font-size: 20px; }
+  .gate p { color: #666; margin: 8px 0 20px; font-size: 14px; }
+  .gate input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+  .gate button { margin-top: 12px; width: 100%; padding: 10px; background: #0071e3; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .gate .err { color: #d00; font-size: 13px; margin-top: 8px; }
+
+  header { background: white; padding: 16px 24px; border-bottom: 1px solid #e5e5e7; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .meta { font-size: 12px; color: #888; }
+
+  .tabs { display: flex; background: white; border-bottom: 1px solid #e5e5e7; padding: 0 24px; gap: 4px; overflow-x: auto; }
+  .tab { padding: 12px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 14px; white-space: nowrap; }
+  .tab.active { border-bottom-color: #0071e3; color: #0071e3; font-weight: 600; }
+
+  .panel { display: none; padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .panel.active { display: block; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: white; border-radius: 10px; padding: 20px; border: 1px solid #e5e5e7; margin-bottom: 16px; }
+  .card h3 { margin: 0 0 14px; font-size: 15px; color: #333; }
+
+  label { display: block; font-size: 13px; color: #555; margin: 10px 0 4px; }
+  input[type="number"], input[type="text"], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  textarea { min-height: 60px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .metric { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+  .metric:last-child { border: none; }
+  .metric .v { font-weight: 600; font-family: monospace; }
+  .ok { color: #0a8; }
+  .bad { color: #d00; }
+  .warn { color: #e80; }
+
+  .check { background: #e8f5e9; color: #2e7d32; padding: 6px 10px; border-radius: 6px; font-size: 13px; margin: 4px 0; }
+  .check.bad { background: #ffebee; color: #c62828; }
+  .check.warn { background: #fff8e1; color: #ef6c00; }
+
+  button.primary { background: #0071e3; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  button.primary:hover { background: #005bb5; }
+  button.ghost { background: transparent; color: #0071e3; border: 1px solid #0071e3; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+
+  svg { width: 100%; height: auto; background: #fafafa; border: 1px solid #e5e5e7; border-radius: 8px; }
+
+  .checklist li { margin: 8px 0; font-size: 14px; }
+  .checklist input[type="checkbox"] { margin-right: 8px; }
+
+  .spec-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .spec-table th, .spec-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+  .spec-table th { background: #fafafa; font-weight: 600; }
+  .spec-table td:last-child, .spec-table th:last-child { text-align: right; font-family: monospace; }
+
+  @media print {
+    header, .tabs, .no-print { display: none !important; }
+    .panel { display: block !important; padding: 0; }
+    body { background: white; }
+    .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate" style="display:none">
+  <h1>Проектировщик лестниц</h1>
+  <p>Введите код доступа, выданный производителем</p>
+  <input id="tokenInput" type="text" placeholder="код доступа" autocomplete="off">
+  <button onclick="checkToken()">Войти</button>
+  <div id="gateErr" class="err"></div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>Проектировщик лестниц · MVP</h1>
+    <div class="meta">маршевая на металлокаркасе · <span id="expiry"></span></div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="params">1. Параметры</div>
+    <div class="tab" data-tab="calc">2. Расчёт</div>
+    <div class="tab" data-tab="scheme">3. Схема</div>
+    <div class="tab" data-tab="spec">4. Спецификация</div>
+    <div class="tab" data-tab="measure">5. Замер</div>
+  </div>
+
+  <!-- 1. Параметры -->
+  <div class="panel active" id="panel-params">
+    <div class="card">
+      <h3>Тип лестницы</h3>
+      <select id="stairType">
+        <option value="straight" selected>Маршевая прямая (на металлокаркасе)</option>
+        <option value="spiral">Винтовая (на центральной стойке)</option>
+      </select>
+    </div>
+    <div class="grid">
+      <div>
+        <div class="card straight-only">
+          <h3>Проём и высота</h3>
+          <label>Высота от чистого пола 1 эт. до чистого пола 2 эт., мм</label>
+          <input type="number" id="floorHeight" value="2900">
+          <div class="row">
+            <div>
+              <label>Длина проёма, мм</label>
+              <input type="number" id="openingLength" value="3500">
+            </div>
+            <div>
+              <label>Ширина проёма, мм</label>
+              <input type="number" id="openingWidth" value="1100">
+            </div>
+          </div>
+          <label>Ширина марша, мм</label>
+          <input type="number" id="marchWidth" value="1000">
+        </div>
+
+        <div class="card straight-only">
+          <h3>Конструкция</h3>
+          <label>Тип каркаса</label>
+          <select id="frameType">
+            <option value="mono">Моно-косоур (центральный)</option>
+            <option value="duo" selected>Двух-косоур</option>
+            <option value="tetiva">Тетива</option>
+          </select>
+          <label>Сечение косоура, мм</label>
+          <input type="text" id="frameSection" value="200×100×6">
+        </div>
+
+        <div class="card spiral-only" style="display:none">
+          <h3>Геометрия винтовой</h3>
+          <label>Высота от чистого пола 1 эт. до чистого пола 2 эт., мм</label>
+          <input type="number" id="spiralHeight" value="2900">
+          <div class="row">
+            <div>
+              <label>Наружный диаметр, мм</label>
+              <input type="number" id="spiralDiameter" value="1600">
+            </div>
+            <div>
+              <label>Ø центральной стойки, мм</label>
+              <input type="number" id="spiralColumn" value="80">
+            </div>
+          </div>
+          <label>Угол поворота лестницы, °</label>
+          <select id="spiralRotation">
+            <option value="270" selected>270° (стандарт)</option>
+            <option value="360">360° (полный оборот)</option>
+            <option value="180">180° (полуоборот)</option>
+            <option value="450">450° (1.25 оборота)</option>
+          </select>
+          <label>Направление</label>
+          <select id="spiralDirection">
+            <option value="cw" selected>По часовой</option>
+            <option value="ccw">Против часовой</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>Ступени</h3>
+          <label>Материал</label>
+          <select id="stepMaterial">
+            <option value="oak" selected>Дуб</option>
+            <option value="ash">Ясень</option>
+            <option value="pine">Сосна</option>
+          </select>
+          <div class="row">
+            <div>
+              <label>Толщина, мм</label>
+              <input type="number" id="stepThickness" value="40">
+            </div>
+            <div>
+              <label>Свес, мм</label>
+              <input type="number" id="stepOverhang" value="30">
+            </div>
+          </div>
+          <label><input type="checkbox" id="hasRisers"> Подступёнки</label>
+        </div>
+
+        <div class="card">
+          <h3>Ограждение</h3>
+          <label>Тип</label>
+          <select id="railingType">
+            <option value="none">Без ограждения</option>
+            <option value="wood">Дерево</option>
+            <option value="metal" selected>Металл (чёрный)</option>
+            <option value="glass">Стекло</option>
+            <option value="forged">Ковка</option>
+          </select>
+          <label>Высота ограждения, мм</label>
+          <input type="number" id="railingHeight" value="900">
+        </div>
+
+        <div class="card">
+          <h3>Заказчик</h3>
+          <label>ФИО</label>
+          <input type="text" id="clientName" placeholder="Иванов Иван">
+          <label>Объект / адрес</label>
+          <input type="text" id="clientAddress" placeholder="МО, КП Лесное, уч. 42">
+          <label>Телефон</label>
+          <input type="text" id="clientPhone">
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <button class="primary" onclick="saveAndCalc()">Сохранить и рассчитать →</button>
+      <button class="ghost" onclick="resetAll()">Сбросить</button>
+    </div>
+  </div>
+
+  <!-- 2. Расчёт -->
+  <div class="panel" id="panel-calc">
+    <div class="grid">
+      <div class="card">
+        <h3>Геометрия марша</h3>
+        <div id="metrics"></div>
+      </div>
+      <div class="card">
+        <h3>Проверки норм</h3>
+        <div id="checks"></div>
+        <div style="margin-top:12px; font-size:12px; color:#888">
+          Нормы: ГОСТ 23120-2016, СП 118.13330. Подступёнок 150–200 мм, проступь ≥ 250 мм, уклон ≤ 45°, формула удобства 2h+b = 600–640 мм.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Схема -->
+  <div class="panel" id="panel-scheme">
+    <div class="card">
+      <h3>Разрез сбоку (в масштабе)</h3>
+      <div id="svgContainer"></div>
+    </div>
+  </div>
+
+  <!-- 4. Спецификация -->
+  <div class="panel" id="panel-spec">
+    <div class="card">
+      <h3>Спецификация для производства</h3>
+      <div id="specContent"></div>
+      <div style="margin-top:16px" class="no-print">
+        <button class="primary" onclick="window.print()">Печать / Сохранить PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Замер -->
+  <div class="panel" id="panel-measure">
+    <div class="card">
+      <h3>Чек-лист замерщика</h3>
+      <ul class="checklist" id="measureList"></ul>
+      <label>Заметки замерщика (отклонения, фото-ссылки, особенности)</label>
+      <textarea id="measureNotes"></textarea>
+      <div style="margin-top:12px; font-size:12px; color:#888">
+        Данные сохраняются локально в браузере (localStorage).
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============= ТОКЕН-ДОСТУП ============= */
+/* Формат токена: имя:срок (YYYY-MM-DD). Добавляй новых клиентов сюда. */
+const TOKENS = {
+  'demo2026':    { name: 'Демо-доступ',        expires: '2026-05-30' },
+  'marina-test': { name: 'Марина (тест)',      expires: '2026-12-31' },
+  'client-001':  { name: 'Клиент #1',          expires: '2026-04-25' },
+};
+
+function checkToken() {
+  const input = document.getElementById('tokenInput').value.trim();
+  tryToken(input, true);
+}
+
+function tryToken(tok, fromUser) {
+  const rec = TOKENS[tok];
+  const err = document.getElementById('gateErr');
+  if (!rec) {
+    if (fromUser) err.textContent = 'Код не найден';
+    return false;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (today > rec.expires) {
+    if (fromUser) err.textContent = 'Срок доступа истёк (до ' + rec.expires + '). Обратитесь к производителю.';
+    return false;
+  }
+  localStorage.setItem('stairs_token', tok);
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('expiry').textContent = rec.name + ' · доступ до ' + rec.expires;
+  init();
+  return true;
+}
+
+function bootGate() {
+  const url = new URLSearchParams(location.search);
+  const urlToken = url.get('token');
+  const stored = localStorage.getItem('stairs_token');
+  if (urlToken && tryToken(urlToken, false)) return;
+  if (stored && tryToken(stored, false)) return;
+  document.getElementById('gate').style.display = 'block';
+}
+
+/* ============= СОСТОЯНИЕ ============= */
+const FIELDS = ['stairType','floorHeight','openingLength','openingWidth','marchWidth','frameType','frameSection',
+  'spiralHeight','spiralDiameter','spiralColumn','spiralRotation','spiralDirection',
+  'stepMaterial','stepThickness','stepOverhang','hasRisers','railingType','railingHeight',
+  'clientName','clientAddress','clientPhone','measureNotes'];
+
+function loadState() {
+  const saved = JSON.parse(localStorage.getItem('stairs_state') || '{}');
+  FIELDS.forEach(f => {
+    const el = document.getElementById(f);
+    if (!el || saved[f] === undefined) return;
+    if (el.type === 'checkbox') el.checked = saved[f];
+    else el.value = saved[f];
+  });
+  (saved.measureChecks || []).forEach((v, i) => {
+    const cb = document.getElementById('mc_' + i);
+    if (cb) cb.checked = v;
+  });
+}
+
+function saveState() {
+  const s = {};
+  FIELDS.forEach(f => {
+    const el = document.getElementById(f);
+    if (!el) return;
+    s[f] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  s.measureChecks = MEASURE_ITEMS.map((_, i) => {
+    const cb = document.getElementById('mc_' + i);
+    return cb ? cb.checked : false;
+  });
+  localStorage.setItem('stairs_state', JSON.stringify(s));
+}
+
+function resetAll() {
+  if (!confirm('Сбросить все параметры?')) return;
+  localStorage.removeItem('stairs_state');
+  location.reload();
+}
+
+/* ============= РАСЧЁТ ============= */
+function getStairType() {
+  return document.getElementById('stairType').value;
+}
+
+function calc() {
+  const stepTh = +document.getElementById('stepThickness').value;
+  const targetRiser = 170;
+
+  if (getStairType() === 'spiral') {
+    const H = +document.getElementById('spiralHeight').value;
+    const D = +document.getElementById('spiralDiameter').value;
+    const Dc = +document.getElementById('spiralColumn').value;
+    const rotation = +document.getElementById('spiralRotation').value;
+    const n = Math.round(H / targetRiser);
+    const riser = H / n;
+    const anglePerStep = rotation / n;
+    const Rout = D / 2;
+    const Rin = Dc / 2;
+    const walkingR = Rin + (Rout - Rin) * 0.6;
+    const angleRad = anglePerStep * Math.PI / 180;
+    const treadOuter = Rout * angleRad;
+    const treadWalking = walkingR * angleRad;
+    const treadInner = Rin * angleRad;
+    const stepWidth = Rout - Rin;
+    const convenience = 2 * riser + treadWalking;
+
+    return { kind: 'spiral', H, D, Dc, rotation, n, riser, anglePerStep,
+             treadOuter, treadWalking, treadInner, stepWidth, Rout, Rin, walkingR,
+             convenience, stepTh,
+             tread: treadWalking, angleDeg: null };
+  }
+
+  const H = +document.getElementById('floorHeight').value;
+  const L = +document.getElementById('openingLength').value;
+  const W = +document.getElementById('openingWidth').value;
+  const MW = +document.getElementById('marchWidth').value;
+
+  const n = Math.round(H / targetRiser);
+  const riser = H / n;
+  const tread = L / (n - 1);
+  const angleRad = Math.atan(riser / tread);
+  const angleDeg = angleRad * 180 / Math.PI;
+  const marchHorizontal = tread * (n - 1);
+  const marchLength = Math.sqrt(marchHorizontal ** 2 + H ** 2);
+  const convenience = 2 * riser + tread;
+
+  return { kind: 'straight', H, L, W, MW, n, riser, tread, angleDeg, marchHorizontal, marchLength, convenience, stepTh };
+}
+
+function fmt(v, d=0) { return Number(v).toFixed(d); }
+
+function renderMetrics(c) {
+  let rows;
+  if (c.kind === 'spiral') {
+    rows = [
+      ['Количество ступеней', c.n + ' шт'],
+      ['Высота подступёнка', fmt(c.riser, 1) + ' мм'],
+      ['Угол на ступень', fmt(c.anglePerStep, 2) + '°'],
+      ['Полный угол поворота', c.rotation + '°'],
+      ['Проступь по линии хождения', fmt(c.treadWalking, 1) + ' мм'],
+      ['Проступь по наружному краю', fmt(c.treadOuter, 1) + ' мм'],
+      ['Проступь у стойки', fmt(c.treadInner, 1) + ' мм'],
+      ['Ширина ступени (рабочая)', fmt(c.stepWidth, 1) + ' мм'],
+      ['Формула удобства (2h+b)', fmt(c.convenience, 0) + ' мм'],
+    ];
+  } else {
+    rows = [
+      ['Количество ступеней', c.n + ' шт'],
+      ['Высота подступёнка', fmt(c.riser, 1) + ' мм'],
+      ['Ширина проступи', fmt(c.tread, 1) + ' мм'],
+      ['Угол наклона', fmt(c.angleDeg, 1) + '°'],
+      ['Горизонтальная проекция марша', fmt(c.marchHorizontal, 0) + ' мм'],
+      ['Длина марша (по наклонной)', fmt(c.marchLength, 0) + ' мм'],
+      ['Формула удобства (2h+b)', fmt(c.convenience, 0) + ' мм'],
+    ];
+  }
+  document.getElementById('metrics').innerHTML = rows.map(r =>
+    `<div class="metric"><span>${r[0]}</span><span class="v">${r[1]}</span></div>`
+  ).join('');
+}
+
+function renderChecks(c) {
+  const items = [];
+  const push = (cond, okMsg, badMsg, warn) => {
+    if (cond) items.push({ cls: 'check', txt: '✓ ' + okMsg });
+    else items.push({ cls: warn ? 'check warn' : 'check bad', txt: (warn ? '⚠ ' : '✗ ') + badMsg });
+  };
+
+  push(c.riser >= 150 && c.riser <= 200,
+    `Подступёнок ${fmt(c.riser,1)} мм в норме (150–200)`,
+    `Подступёнок ${fmt(c.riser,1)} мм вне нормы (150–200)`);
+
+  if (c.kind === 'spiral') {
+    push(c.treadWalking >= 200,
+      `Проступь по линии хождения ${fmt(c.treadWalking,0)} мм ≥ 200`,
+      `Проступь по линии хождения ${fmt(c.treadWalking,0)} мм < 200 — неудобно`);
+    push(c.treadInner >= 100,
+      `У стойки проступь ${fmt(c.treadInner,0)} мм ≥ 100`,
+      `У стойки проступь ${fmt(c.treadInner,0)} мм < 100 — опасно, нога не помещается`);
+    push(c.stepWidth >= 700,
+      `Ширина ступени ${fmt(c.stepWidth,0)} мм ≥ 700`,
+      `Ширина ступени ${fmt(c.stepWidth,0)} мм < 700 — тесно для жилой лестницы`, true);
+    push(c.D >= 1400,
+      `Диаметр ${c.D} мм подходит для жилой лестницы (≥1400)`,
+      `Диаметр ${c.D} мм мал — рекомендуется ≥1400 мм для основной, ≥1200 для вспомогательной`, true);
+    push(c.convenience >= 550 && c.convenience <= 640,
+      `Формула удобства ${fmt(c.convenience,0)} мм приемлема для винтовой (550–640)`,
+      `Формула удобства ${fmt(c.convenience,0)} мм вне диапазона`, true);
+    push(c.anglePerStep >= 20 && c.anglePerStep <= 40,
+      `Угол на ступень ${fmt(c.anglePerStep,1)}° в норме (20–40°)`,
+      `Угол на ступень ${fmt(c.anglePerStep,1)}° вне нормы — пересмотри поворот или число ступеней`, true);
+  } else {
+    push(c.tread >= 250,
+      `Проступь ${fmt(c.tread,1)} мм ≥ 250`,
+      `Проступь ${fmt(c.tread,1)} мм < 250 — неудобно и небезопасно`);
+    push(c.angleDeg <= 45,
+      `Уклон ${fmt(c.angleDeg,1)}° в норме (≤45°)`,
+      `Уклон ${fmt(c.angleDeg,1)}° слишком крутой (>45°)`);
+    push(c.convenience >= 600 && c.convenience <= 640,
+      `Формула удобства ${fmt(c.convenience,0)} мм в норме (600–640)`,
+      `Формула удобства ${fmt(c.convenience,0)} мм вне комфортного диапазона`, true);
+    push(c.marchHorizontal <= c.L + 50,
+      `Марш помещается в проём по длине`,
+      `Марш ${fmt(c.marchHorizontal,0)} мм не помещается в проём ${c.L} мм`);
+    push(c.MW + 50 <= c.W,
+      `Ширина марша проходит в проём`,
+      `Ширина марша ${c.MW} мм шире проёма ${c.W} мм`);
+    push(c.MW >= 900,
+      `Ширина марша ${c.MW} мм ≥ 900`,
+      `Ширина марша ${c.MW} мм < 900 — рекомендуется от 900 мм для жилых`, true);
+  }
+
+  document.getElementById('checks').innerHTML = items.map(i => `<div class="${i.cls}">${i.txt}</div>`).join('');
+}
+
+/* ============= СХЕМА ============= */
+function renderScheme(c) {
+  if (c.kind === 'spiral') return renderSpiralScheme(c);
+  const pad = 40;
+  const scale = Math.min(800 / (c.marchHorizontal + 400), 500 / (c.H + 400));
+  const W_svg = 900;
+  const H_svg = 500;
+  const x0 = pad;
+  const y0 = H_svg - pad;
+
+  let steps = '';
+  for (let i = 0; i < c.n; i++) {
+    const x = x0 + i * c.tread * scale;
+    const yTop = y0 - (i + 1) * c.riser * scale;
+    const yBot = y0 - i * c.riser * scale;
+    steps += `<rect x="${x}" y="${yTop}" width="${c.tread * scale + 1}" height="${c.stepTh * scale + 2}" fill="#c9a678" stroke="#8b6a3a"/>`;
+    steps += `<line x1="${x}" y1="${yTop}" x2="${x}" y2="${yBot}" stroke="#666" stroke-dasharray="2,2"/>`;
+  }
+
+  const floorY = y0;
+  const ceilY = y0 - c.H * scale;
+
+  const svg = `
+  <svg viewBox="0 0 ${W_svg} ${H_svg}" xmlns="http://www.w3.org/2000/svg">
+    <line x1="0" y1="${floorY}" x2="${W_svg}" y2="${floorY}" stroke="#333" stroke-width="2"/>
+    <line x1="0" y1="${ceilY}" x2="${W_svg}" y2="${ceilY}" stroke="#333" stroke-width="2"/>
+    <text x="10" y="${floorY + 20}" font-size="12" fill="#666">пол 1 этажа</text>
+    <text x="10" y="${ceilY - 8}" font-size="12" fill="#666">перекрытие 2 этажа (H=${c.H} мм)</text>
+    ${steps}
+    <line x1="${x0}" y1="${floorY}" x2="${x0 + c.marchHorizontal * scale}" y2="${ceilY}"
+          stroke="#0071e3" stroke-width="2" opacity="0.4"/>
+    <text x="${x0 + c.marchHorizontal * scale / 2}" y="${(floorY + ceilY) / 2 - 10}"
+          font-size="13" fill="#0071e3" font-weight="bold">${fmt(c.angleDeg,1)}°</text>
+    <text x="${W_svg - 200}" y="30" font-size="12" fill="#888">ступеней: ${c.n}, подступёнок ${fmt(c.riser,0)} мм, проступь ${fmt(c.tread,0)} мм</text>
+  </svg>`;
+  document.getElementById('svgContainer').innerHTML = svg;
+}
+
+function renderSpiralScheme(c) {
+  const W_svg = 900, H_svg = 500;
+  const cx = 250, cy = 250;
+  const scale = 200 / c.Rout;
+  const Rout = c.Rout * scale;
+  const Rin = c.Rin * scale;
+  const dir = document.getElementById('spiralDirection').value === 'cw' ? 1 : -1;
+  const startAngle = -90;
+
+  const colors = ['#c9a678','#d4b48a'];
+  let sectors = '';
+  for (let i = 0; i < c.n; i++) {
+    const a1 = (startAngle + dir * i * c.anglePerStep) * Math.PI / 180;
+    const a2 = (startAngle + dir * (i + 1) * c.anglePerStep) * Math.PI / 180;
+    const x1o = cx + Rout * Math.cos(a1), y1o = cy + Rout * Math.sin(a1);
+    const x2o = cx + Rout * Math.cos(a2), y2o = cy + Rout * Math.sin(a2);
+    const x1i = cx + Rin * Math.cos(a1), y1i = cy + Rin * Math.sin(a1);
+    const x2i = cx + Rin * Math.cos(a2), y2i = cy + Rin * Math.sin(a2);
+    const large = Math.abs(c.anglePerStep) > 180 ? 1 : 0;
+    const sweep = dir > 0 ? 1 : 0;
+    const sweepIn = dir > 0 ? 0 : 1;
+    sectors += `<path d="M ${x1i} ${y1i} L ${x1o} ${y1o} A ${Rout} ${Rout} 0 ${large} ${sweep} ${x2o} ${y2o} L ${x2i} ${y2i} A ${Rin} ${Rin} 0 ${large} ${sweepIn} ${x1i} ${y1i} Z" fill="${colors[i%2]}" stroke="#8b6a3a" stroke-width="1"/>`;
+    const amid = (a1 + a2) / 2;
+    const rMid = (Rin + Rout) / 2;
+    sectors += `<text x="${cx + rMid * Math.cos(amid)}" y="${cy + rMid * Math.sin(amid) + 4}" font-size="10" fill="#444" text-anchor="middle">${i+1}</text>`;
+  }
+
+  const walkR = c.walkingR * scale;
+  const walkingCircle = `<circle cx="${cx}" cy="${cy}" r="${walkR}" fill="none" stroke="#0071e3" stroke-dasharray="4,3" opacity="0.6"/>`;
+  const column = `<circle cx="${cx}" cy="${cy}" r="${Rin}" fill="#555" stroke="#222"/>`;
+
+  const sideX = 560, sideW = 280, sideH = 380, sideY = 60;
+  const sideScale = (sideH - 40) / c.H;
+  let sideSteps = '';
+  for (let i = 0; i < c.n; i++) {
+    const y = sideY + sideH - 20 - (i + 1) * c.riser * sideScale;
+    sideSteps += `<rect x="${sideX + 60}" y="${y}" width="${c.D * sideScale * 0.6}" height="${c.stepTh * sideScale + 2}" fill="#c9a678" stroke="#8b6a3a" opacity="0.5"/>`;
+  }
+  const colH = c.H * sideScale;
+  const sideView = `
+    <rect x="${sideX}" y="${sideY}" width="${sideW}" height="${sideH}" fill="#fafafa" stroke="#ddd"/>
+    <text x="${sideX + sideW/2}" y="${sideY + 20}" font-size="12" fill="#888" text-anchor="middle">вид сбоку (пропорции)</text>
+    <line x1="${sideX + 60}" y1="${sideY + sideH - 20}" x2="${sideX + sideW - 20}" y2="${sideY + sideH - 20}" stroke="#333" stroke-width="2"/>
+    <line x1="${sideX + 60}" y1="${sideY + sideH - 20 - colH}" x2="${sideX + sideW - 20}" y2="${sideY + sideH - 20 - colH}" stroke="#333" stroke-width="2"/>
+    <rect x="${sideX + 55}" y="${sideY + sideH - 20 - colH}" width="10" height="${colH}" fill="#555"/>
+    ${sideSteps}
+  `;
+
+  const svg = `
+  <svg viewBox="0 0 ${W_svg} ${H_svg}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${cx}" y="30" font-size="12" fill="#888" text-anchor="middle">вид сверху (план)</text>
+    ${sectors}
+    ${walkingCircle}
+    ${column}
+    <text x="${cx}" y="${cy + Rout + 30}" font-size="11" fill="#0071e3" text-anchor="middle">линия хождения (синий пунктир)</text>
+    <text x="${cx}" y="${cy + Rout + 46}" font-size="11" fill="#666" text-anchor="middle">Ø${c.D} мм, поворот ${c.rotation}°, ${c.n} ступ.</text>
+    ${sideView}
+  </svg>`;
+  document.getElementById('svgContainer').innerHTML = svg;
+}
+
+/* ============= СПЕЦИФИКАЦИЯ ============= */
+const PRICES = {
+  oak: 18000, ash: 14000, pine: 6000,
+  metal_kg: 350,
+  railing: { none: 0, wood: 8000, metal: 9000, glass: 22000, forged: 25000 }
+};
+const STEP_MATERIAL_NAME = { oak: 'Дуб', ash: 'Ясень', pine: 'Сосна' };
+const FRAME_NAME = { mono: 'Моно-косоур', duo: 'Двух-косоур', tetiva: 'Тетива' };
+const RAILING_NAME = { none: 'Без ограждения', wood: 'Дерево', metal: 'Металл (чёрный)', glass: 'Стекло', forged: 'Ковка' };
+
+function renderSpec(c) {
+  const mat = document.getElementById('stepMaterial').value;
+  const railing = document.getElementById('railingType').value;
+  const railingH = +document.getElementById('railingHeight').value;
+  const hasRisers = document.getElementById('hasRisers').checked;
+  const client = document.getElementById('clientName').value || '—';
+  const addr = document.getElementById('clientAddress').value || '—';
+  const phone = document.getElementById('clientPhone').value || '—';
+
+  let rows, cost, grandTotal;
+
+  if (c.kind === 'spiral') {
+    const avgStepArea = ((c.treadOuter + c.treadInner) / 2 * c.stepWidth) / 1e6;
+    const stepsTotal = PRICES[mat] * avgStepArea * c.n;
+    const columnKg = (c.H / 1000) * Math.PI * Math.pow(c.Dc / 2000, 2) * 7850;
+    const columnTotal = columnKg * PRICES.metal_kg * 1.3;
+    const railingLen = (c.walkingR * 2 * Math.PI * c.rotation / 360) / 1000;
+    const railingTotal = PRICES.railing[railing] * railingLen;
+    const risersTotal = hasRisers ? (c.n * (c.riser * c.stepWidth / 1e6) * PRICES[mat] * 0.5) : 0;
+    grandTotal = stepsTotal + columnTotal + railingTotal + risersTotal;
+
+    rows = [
+      ['Заказчик', client],
+      ['Объект', addr],
+      ['Телефон', phone],
+      ['Тип лестницы', 'Винтовая на центральной стойке'],
+      ['Центральная стойка', 'Ø' + c.Dc + ' мм, H=' + c.H + ' мм'],
+      ['Наружный диаметр', c.D + ' мм'],
+      ['Угол поворота', c.rotation + '°'],
+      ['Направление', document.getElementById('spiralDirection').value === 'cw' ? 'По часовой' : 'Против часовой'],
+      ['Материал ступеней', STEP_MATERIAL_NAME[mat]],
+      ['Ступеней', c.n + ' шт, ширина ' + fmt(c.stepWidth,0) + ' мм, толщина ' + c.stepTh + ' мм'],
+      ['Угол на ступень', fmt(c.anglePerStep,2) + '°'],
+      ['Подступёнки', hasRisers ? 'Да' : 'Нет'],
+      ['Ограждение', RAILING_NAME[railing] + (railing !== 'none' ? ', H=' + railingH + ' мм' : '')],
+      ['Высота этажа', c.H + ' мм'],
+    ];
+    cost = [
+      ['Ступени клиновидные (' + STEP_MATERIAL_NAME[mat] + ')', fmt(stepsTotal,0) + ' ₽'],
+      ['Центральная стойка + фланцы', fmt(columnTotal,0) + ' ₽'],
+    ];
+    if (hasRisers) cost.push(['Подступёнки', fmt(risersTotal,0) + ' ₽']);
+    if (railing !== 'none') cost.push(['Ограждение по дуге (' + fmt(railingLen,1) + ' м)', fmt(railingTotal,0) + ' ₽']);
+  } else {
+    const frame = document.getElementById('frameType').value;
+    const stepArea = (c.tread * c.MW) / 1e6;
+    const stepsTotal = PRICES[mat] * stepArea * c.n;
+    const frameMultiplier = frame === 'mono' ? 1 : 2;
+    const frameKg = (c.marchLength / 1000) * 18 * frameMultiplier;
+    const frameTotal = frameKg * PRICES.metal_kg;
+    const railingLen = c.marchLength / 1000;
+    const railingTotal = PRICES.railing[railing] * railingLen;
+    const risersTotal = hasRisers ? (c.n * (c.riser * c.MW / 1e6) * PRICES[mat] * 0.5) : 0;
+    grandTotal = stepsTotal + frameTotal + railingTotal + risersTotal;
+
+    rows = [
+      ['Заказчик', client],
+      ['Объект', addr],
+      ['Телефон', phone],
+      ['Тип лестницы', 'Маршевая прямая'],
+      ['Каркас', FRAME_NAME[frame] + ', ' + document.getElementById('frameSection').value + ' мм'],
+      ['Материал ступеней', STEP_MATERIAL_NAME[mat]],
+      ['Ступеней', c.n + ' шт, ' + fmt(c.tread,0) + '×' + c.MW + '×' + c.stepTh + ' мм'],
+      ['Подступёнки', hasRisers ? 'Да' : 'Нет'],
+      ['Ограждение', RAILING_NAME[railing] + (railing !== 'none' ? ', H=' + railingH + ' мм' : '')],
+      ['Высота этажа', c.H + ' мм'],
+      ['Уклон', fmt(c.angleDeg,1) + '°'],
+    ];
+    cost = [
+      ['Ступени (' + STEP_MATERIAL_NAME[mat] + ')', fmt(stepsTotal,0) + ' ₽'],
+      ['Металлокаркас (~' + fmt(frameKg,0) + ' кг)', fmt(frameTotal,0) + ' ₽'],
+    ];
+    if (hasRisers) cost.push(['Подступёнки', fmt(risersTotal,0) + ' ₽']);
+    if (railing !== 'none') cost.push(['Ограждение (' + RAILING_NAME[railing] + ')', fmt(railingTotal,0) + ' ₽']);
+  }
+  cost.push(['<b>ИТОГО (ориентировочно)</b>', '<b>' + fmt(grandTotal,0) + ' ₽</b>']);
+
+  document.getElementById('specContent').innerHTML = `
+    <h4>Параметры</h4>
+    <table class="spec-table">${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
+    <h4 style="margin-top:20px">Ориентировочная смета</h4>
+    <table class="spec-table">${cost.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
+    <p style="margin-top:16px; font-size:12px; color:#888">
+      Смета предварительная, по усреднённым ценам рынка МО 2026. Финальная калькуляция — после замера и согласования с производителем.
+    </p>
+    <p style="margin-top:20px; font-size:13px">
+      Дата: ${new Date().toLocaleDateString('ru-RU')} · Документ сформирован автоматически.
+    </p>
+  `;
+}
+
+/* ============= ЗАМЕР ============= */
+const MEASURE_ITEMS = [
+  'Высота от чистого пола 1 эт. до чистого пола 2 эт. измерена в 3 точках (разница ≤ 5 мм)',
+  'Проём в перекрытии измерен по факту (не по проекту), длина и ширина',
+  'Проверена вертикальность стен вдоль марша (отклонение ≤ 10 мм на 2 м)',
+  'Проверена горизонтальность пола в зоне установки (отклонение ≤ 5 мм)',
+  'Выявлены коммуникации в зоне крепления (трубы, кабели, вент.каналы)',
+  'Определено место опоры верхнего марша (балка, плита, стена)',
+  'Согласовано направление захода и выхода с этажа',
+  'Сделаны фото проёма и зоны установки (минимум 6 ракурсов)',
+];
+
+function renderMeasure() {
+  document.getElementById('measureList').innerHTML = MEASURE_ITEMS.map((t, i) =>
+    `<li><input type="checkbox" id="mc_${i}"> ${t}</li>`
+  ).join('');
+}
+
+/* ============= ВКЛАДКИ ============= */
+function initTabs() {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+      recalc();
+    });
+  });
+}
+
+function toggleTypeBlocks() {
+  const isSpiral = getStairType() === 'spiral';
+  document.querySelectorAll('.straight-only').forEach(el => el.style.display = isSpiral ? 'none' : '');
+  document.querySelectorAll('.spiral-only').forEach(el => el.style.display = isSpiral ? '' : 'none');
+}
+
+function recalc() {
+  toggleTypeBlocks();
+  const c = calc();
+  renderMetrics(c);
+  renderChecks(c);
+  renderScheme(c);
+  renderSpec(c);
+}
+
+function saveAndCalc() {
+  saveState();
+  recalc();
+  document.querySelector('.tab[data-tab="calc"]').click();
+}
+
+function init() {
+  renderMeasure();
+  loadState();
+  initTabs();
+  FIELDS.forEach(f => {
+    const el = document.getElementById(f);
+    if (el) el.addEventListener('change', () => { saveState(); recalc(); });
+  });
+  MEASURE_ITEMS.forEach((_, i) => {
+    const cb = document.getElementById('mc_' + i);
+    if (cb) cb.addEventListener('change', saveState);
+  });
+  recalc();
+}
+
+bootGate();
+</script>
+</body>
+</html>
