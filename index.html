@@ -97,6 +97,23 @@
 
   <!-- 1. Параметры -->
   <div class="panel active" id="panel-params">
+    <div id="demoBanner" class="card" style="display:none; background:linear-gradient(135deg,#e3f2fd,#f3e5f5); border:2px solid #0071e3">
+      <h3 style="margin-top:0; color:#0071e3">👋 Демо-режим · что посмотреть за 3 минуты</h3>
+      <p style="margin:6px 0; font-size:14px; line-height:1.6">
+        Параметры ниже уже заполнены под типовой объект (коттедж в МО, 3 м высота, дуб).
+        Пройди по вкладкам сверху в таком порядке:
+      </p>
+      <ol style="margin:10px 0; font-size:14px; line-height:1.7">
+        <li><b>Вкладка 2 «Расчёт»</b> — посмотри геометрию и автоматические проверки по ГОСТ 23120 / СП 118. Красное — нарушение норм, жёлтое — предупреждение.</li>
+        <li><b>Вкладка 3 «Схема»</b> — готовый чертёж-разрез, можно показать заказчику.</li>
+        <li><b>Вкладка 4 «Спецификация»</b> — вверху переключатель. <b>«Для клиента»</b> = КП со сметой. <b>«Для производства»</b> = техзадание в цех с ведомостями ступеней, металла, крепежа.</li>
+        <li><b>Вкладка 5 «Замер»</b> — чек-лист для выезда замерщика, 8 критичных пунктов.</li>
+        <li>Вернись сюда, поменяй <b>тип лестницы → Винтовая</b>, пройди те же вкладки — увидишь как инструмент работает с другой геометрией.</li>
+      </ol>
+      <p style="margin:10px 0 0; font-size:13px; color:#555">
+        <b>Что это решает для производителя:</b> клиент получает КП с картинкой за 3 минуты вместо 3 дней · замерщик едет на объект с готовыми параметрами · цех получает ведомости без ручного пересчёта · меньше ошибок и переделок.
+      </p>
+    </div>
     <div class="card">
       <h3>Тип лестницы</h3>
       <select id="stairType">
@@ -276,7 +293,7 @@
 /* ============= ТОКЕН-ДОСТУП ============= */
 /* Формат токена: имя:срок (YYYY-MM-DD). Добавляй новых клиентов сюда. */
 const TOKENS = {
-  'demo2026':    { name: 'Демо-доступ',        expires: '2026-05-30' },
+  'demo2026':    { name: 'Демо-доступ',        expires: '2026-05-30', demo: true },
   'marina-test': { name: 'Марина (тест)',      expires: '2026-12-31' },
   'client-001':  { name: 'Клиент #1',          expires: '2026-04-25' },
   'test-0425':   { name: 'Тест',               expires: '2026-04-25' },
@@ -303,6 +320,11 @@ function tryToken(tok, fromUser) {
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('expiry').textContent = rec.name + ' · доступ до ' + rec.expires;
+  if (rec.demo) {
+    localStorage.setItem('stairs_is_demo', '1');
+  } else {
+    localStorage.removeItem('stairs_is_demo');
+  }
   init();
   return true;
 }
@@ -907,9 +929,38 @@ function saveAndCalc() {
   document.querySelector('.tab[data-tab="calc"]').click();
 }
 
+const DEMO_DATA = {
+  stairType: 'straight',
+  floorHeight: '3000', openingLength: '3600', openingWidth: '1100', marchWidth: '1000',
+  frameType: 'duo', frameSection: '200×100×6',
+  spiralHeight: '2900', spiralDiameter: '1800', spiralColumn: '80', spiralRotation: '270', spiralDirection: 'cw',
+  stepMaterial: 'oak', stepThickness: '40', stepOverhang: '30', hasRisers: false,
+  railingType: 'metal', railingHeight: '900',
+  clientName: 'Иванов Иван Иванович',
+  clientAddress: 'МО, КП «Лесное», уч. 42',
+  clientPhone: '+7 916 123-45-67',
+  measureNotes: 'Демо-объект. На реальном замере — 8 пунктов чек-листа слева.',
+};
+
+function applyDemoDataIfFresh() {
+  if (localStorage.getItem('stairs_is_demo') !== '1') return;
+  if (localStorage.getItem('stairs_state')) return;
+  Object.entries(DEMO_DATA).forEach(([k, v]) => {
+    const el = document.getElementById(k);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!v;
+    else el.value = v;
+  });
+}
+
 function init() {
   renderMeasure();
+  applyDemoDataIfFresh();
   loadState();
+  if (localStorage.getItem('stairs_is_demo') === '1') {
+    const b = document.getElementById('demoBanner');
+    if (b) b.style.display = 'block';
+  }
   initTabs();
   FIELDS.forEach(f => {
     const el = document.getElementById(f);
